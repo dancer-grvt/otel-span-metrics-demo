@@ -1,0 +1,77 @@
+logging {
+    level = "info"
+    format = "logfmt"
+}
+
+otelcol.receiver.otlp "default" {
+    http {
+        endpoint = "0.0.0.0:4318"
+    }
+    grpc {
+        endpoint = "0.0.0.0:4317"
+    }
+
+    output {
+        traces  = [otelcol.processor.transform.spanmetrics.input]
+    }
+}
+
+otelcol.processor.transform "spanmetrics" {
+    error_mode = "ignore"
+
+    trace_statements {
+        context = "resource"
+        statements = [
+        // We keep only the "service.name" and "special.attr" resource attributes,
+        // because they are the only ones which otelcol.connector.spanmetrics needs.
+        //
+        // There is no need to list "span.name", "span.kind", and "status.code"
+        // here because they are properties of the span (and not resource attributes):
+        // https://github.com/open-telemetry/opentelemetry-proto/blob/v1.0.0/opentelemetry/proto/trace/v1/trace.proto
+        `keep_keys(attributes, ["service.name", "special.attr"])`,
+        ]
+    }
+
+    output {
+        traces  = [otelcol.connector.spanmetrics.default.input]
+    }
+}
+
+// See https://grafana.com/docs/alloy/latest/reference/components/otelcol/otelcol.connector.spanmetrics/
+otelcol.connector.spanmetrics "default" {
+    namespace = "traces_spanmetrics"
+
+    histogram {
+        exponential {
+            max_size = 160
+        }
+    }
+
+    output {
+        metrics = [otelcol.exporter.prometheus.mimir.input]
+    }
+}
+
+
+// In this local setup ofc there's no mimir, it write directly to Prometheus
+otelcol.exporter.prometheus "mimir" {
+    forward_to = [prometheus.remote_write.mimir.receiver]
+}
+
+prometheus.remote_write "mimir" {
+    endpoint {
+        name    = "Mimir"
+        url     = "http://prometheus:9090/api/v1/write"
+        headers = {
+            "X-Scope-OrgID" = "grvt",
+        }
+
+        queue_config { }
+
+        metadata_config { }
+    }
+    external_labels =  {
+        "cluster" = "dev-workload",
+        "collected_by" = "alloy",
+    }
+}
