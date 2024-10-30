@@ -1,5 +1,5 @@
 logging {
-    level = "info"
+    level = "debug"
     format = "logfmt"
 }
 
@@ -12,7 +12,21 @@ otelcol.receiver.otlp "default" {
     }
 
     output {
-        traces  = [otelcol.processor.transform.spanmetrics.input]
+        traces  = [otelcol.processor.transform.add_trace_attributes.input]
+    }
+}
+
+
+
+otelcol.processor.transform "add_trace_attributes" {
+    trace_statements {
+        context = "span"
+        statements = [
+            `set(attributes["trace_id"], trace_id.string)`,
+        ]
+    }
+    output {
+        traces =[otelcol.processor.transform.spanmetrics.input]
     }
 }
 
@@ -28,7 +42,7 @@ otelcol.processor.transform "spanmetrics" {
         // There is no need to list "span.name", "span.kind", and "status.code"
         // here because they are properties of the span (and not resource attributes):
         // https://github.com/open-telemetry/opentelemetry-proto/blob/v1.0.0/opentelemetry/proto/trace/v1/trace.proto
-        `keep_keys(attributes, ["service.name", "special.attr"])`,
+        `keep_keys(attributes, ["service.name", "special.attr", "trace_id"])`,
         ]
     }
 
@@ -37,14 +51,26 @@ otelcol.processor.transform "spanmetrics" {
     }
 }
 
+
 // See https://grafana.com/docs/alloy/latest/reference/components/otelcol/otelcol.connector.spanmetrics/
 otelcol.connector.spanmetrics "default" {
     namespace = "traces_spanmetrics"
+    
+    dimension {
+        name = "trace_id"
+    }
+
+    metrics_flush_interval = "10s"
 
     histogram {
-        exponential {
-            max_size = 160
+        disable = false
+        explicit {
+            buckets = ["2ms", "4ms", "6ms", "8ms", "10ms", "50ms", "100ms", "200ms", "400ms", "800ms", "1s", "1400ms", "2s", "5s", "10s", "15s"]
         }
+    }
+
+    exemplars {
+        enabled = true
     }
 
     output {
