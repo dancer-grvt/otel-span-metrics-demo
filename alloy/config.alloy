@@ -22,8 +22,8 @@ otelcol.processor.transform "add_trace_attributes" {
     trace_statements {
         context = "span"
         statements = [
-            `set(attributes["trace_id"], trace_id.string)`,
-            `set(attributes["parent_span_id"], parent_span_id.string)`,
+            `set(attributes["is_root_span"], "true") where parent_span_id.string == "0000000000000000"`,
+            `set(attributes["is_root_span"], "false") where parent_span_id.string != "0000000000000000"`,
         ]
     }
     output {
@@ -43,7 +43,7 @@ otelcol.processor.transform "spanmetrics" {
         // There is no need to list "span.name", "span.kind", and "status.code"
         // here because they are properties of the span (and not resource attributes):
         // https://github.com/open-telemetry/opentelemetry-proto/blob/v1.0.0/opentelemetry/proto/trace/v1/trace.proto
-        `keep_keys(attributes, ["service.name", "special.attr", "trace_id", "parent_span_id"])`,
+        `keep_keys(attributes, ["service.name", "special.attr", "is_root_span"])`,
         ]
     }
 
@@ -58,11 +58,7 @@ otelcol.connector.spanmetrics "default" {
     namespace = "traces_spanmetrics"
     
     dimension {
-        name = "trace_id"
-    }
-    
-    dimension {
-        name = "parent_span_id"
+        name = "is_root_span"
     }
 
     metrics_flush_interval = "10s"
