@@ -12,11 +12,24 @@ otelcol.receiver.otlp "default" {
     }
 
     output {
-        traces  = [otelcol.processor.transform.add_trace_attributes.input]
+        traces  = [otelcol.processor.filter.reduce_unnecessary_tail_span.input]
     }
 }
 
+otelcol.processor.filter "reduce_unnecessary_tail_span" {
+    error_mode = "ignore"
 
+    traces {
+        span = [
+            `name == "v1.mini.d"`,
+            `name == "v1.mini.s"`,
+        ]
+    }
+
+    output {
+        traces = [otelcol.processor.transform.add_trace_attributes.input]
+    }
+}
 
 otelcol.processor.transform "add_trace_attributes" {
     trace_statements {
